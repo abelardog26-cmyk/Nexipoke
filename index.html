@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pokédeck TCG</title>
+<style>
+:root{--bg:#f6f4ee;--card:#fff;--tx:#1d1d22;--mu:#6b6b76;--ac:#d9363e;--ln:#e3e0d6;--ok:#1f8a4c;--bad:#c62828}
+@media (prefers-color-scheme:dark){:root{--bg:#141418;--card:#1e1e25;--tx:#f0f0f3;--mu:#9a9aa6;--ln:#33333d}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.4 system-ui,sans-serif}
+header,nav,main{max-width:1000px;margin:auto;padding-left:16px;padding-right:16px}
+header{padding-top:14px;display:flex;justify-content:space-between;align-items:center}h1{margin:0;font-size:20px}h1 span{color:var(--ac)}
+nav{display:flex;gap:6px;padding-top:12px;padding-bottom:12px}
+nav button{flex:1;padding:10px 4px;border:1px solid var(--ln);background:var(--card);color:var(--tx);border-radius:10px;font-weight:600}
+nav button.on{background:var(--ac);color:#fff;border-color:var(--ac)}
+main{padding-bottom:50px}
+.g{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.gs{grid-template-columns:repeat(auto-fill,minmax(210px,1fr))}
+.c{background:var(--card);border:1px solid var(--ln);border-radius:12px;padding:10px;margin-bottom:10px}.g .c{margin:0}
+.c img{width:100%;border-radius:8px;display:block;background:var(--ln);aspect-ratio:5/7;object-fit:contain}
+.c img.lg{aspect-ratio:auto;height:70px;margin-bottom:6px}
+.c h3{margin:6px 0 2px;font-size:14px}.m{color:var(--mu);font-size:12.5px}
+.b{display:inline-block;padding:1px 8px;border-radius:99px;font-size:11.5px;font-weight:700;background:var(--ln);margin-right:4px}
+.b.ok{background:#d6f0e0;color:#14663a}.b.no{background:#f8d9d9;color:#8f1d1d}
+input,select,button{font:inherit;color:var(--tx)}
+input,select{padding:9px;border:1px solid var(--ln);border-radius:8px;background:var(--card);min-width:0}
+.r{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0;align-items:center}.r input[type=text]{flex:1 1 160px}
+.p{background:var(--ac);color:#fff;border:0;border-radius:8px;padding:8px 12px;font-weight:600}
+.s{background:var(--card);border:1px solid var(--ln);border-radius:8px;padding:7px 10px}
+.two{display:flex;gap:4px;margin-top:6px}.two button{flex:1;font-size:12.5px;padding:7px 2px}
+.row{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--ln)}.row img{width:42px;border-radius:4px}.row .n{flex:1;min-width:0}
+.q{display:flex;align-items:center;gap:6px}.q button{width:30px;height:30px;border-radius:8px;border:1px solid var(--ln);background:var(--card)}
+.val{list-style:none;padding:0;margin:0}.val .ok{color:var(--ok)}.val .bad{color:var(--bad)}
+.bar{height:8px;background:var(--ln);border-radius:8px;overflow:hidden;margin:6px 0}.bar i{display:block;height:100%;background:var(--ac)}
+.note{font-size:12.5px;color:var(--mu);margin:8px 0}
+#t{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:#222;color:#fff;padding:8px 14px;border-radius:99px;font-size:13px;opacity:0;transition:.2s;pointer-events:none}#t.on{opacity:1}
+</style></head><body>
+<header><h1>Poké<span>deck</span> TCG</h1><select id="lg" onchange="L=this.value;try{localStorage.setItem('pl',L)}catch(e){};cache={};go('exp')"><option value="es">Español</option><option value="en">English</option><option value="fr">Français</option><option value="pt">Português</option><option value="it">Italiano</option><option value="de">Deutsch</option></select></header>
+<nav id="nav"></nav><main id="v"></main><div id="t"></div>
+<script>
+const API="https://api.tcgdex.net/v2/";
+let L="es",S={coll:[],decks:[],cur:null},tab="exp",cache={},list=[],setInfo=null,msg="",busy=false;
+const $=s=>document.querySelector(s),rid=()=>Math.random().toString(36).slice(2,9);
+const esc=t=>String(t==null?"":t).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const img=(u,q="low")=>u?u+"/"+q+".webp":"";
+function toast(t){const e=$("#t");e.textContent=t;e.className="on";setTimeout(()=>e.className="",1400)}
+function save(){try{localStorage.setItem("pk2",JSON.stringify(S))}catch(e){}}
+try{const j=localStorage.getItem("pk2");if(j)S=JSON.parse(j);L=localStorage.getItem("pl")||"es"}catch(e){}
+$("#lg").value=L;
+if(!S.decks.length){S.decks.push({id:rid(),name:"Deck 1",cards:[]});S.cur=S.decks[0].id}
+const deck=()=>S.decks.find(d=>d.id===S.cur)||S.decks[0];
+async function j(u){if(cache[u])return cache[u];const r=await fetch(u);if(!r.ok)throw new Error(r.status);return cache[u]=await r.json()}
+function go(t){tab=t;setInfo=null;list=[];msg="";render();if(t==="exp")loadSets()}
+
+// ---------- Datos de la API ----------
+async function loadSets(){busy=true;render();try{const a=await j(API+L+"/sets");list=a.slice().reverse().map(s=>({kind:"set",id:s.id,name:s.name,logo:s.logo,n:s.cardCount&&s.cardCount.total}))}catch(e){msg="No se pudo conectar con TCGdex. Revisa tu conexión."}busy=false;render()}
+async function openSet(id){busy=true;render();try{const s=await j(API+L+"/sets/"+id);setInfo={name:s.name,date:s.releaseDate,logo:s.logo,serie:s.serie&&s.serie.name};list=(s.cards||[]).map(c=>({kind:"card",id:c.id,name:c.name,num:c.localId,image:c.image,set:s.name}))}catch(e){msg="No se pudo cargar la expansión."}busy=false;render()}
+async function search(q){q=q.trim();if(!q)return;setInfo=null;busy=true;render();try{const a=await j(API+L+"/cards?name="+encodeURIComponent(q));list=a.slice(0,120).map(c=>({kind:"card",id:c.id,name:c.name,num:c.localId,image:c.image,set:c.id.split("-")[0].toUpperCase()}));msg=a.length?"":"Sin resultados."}catch(e){msg="Error al buscar."}busy=false;render()}
+async function full(c){ // clasificación siempre en inglés para que las reglas funcionen en cualquier idioma
+ const d=await j(API+"en/cards/"+c.id);const rar=d.rarity||"";
+ return{id:c.id,name:c.name,num:c.num,set:c.set,image:c.image||d.image||"",cat:d.category,stage:d.stage||"",mark:d.regulationMark||"",
+  std:!!(d.legal&&d.legal.standard),ace:/ace spec/i.test(rar+" "+(d.suffix||"")),rad:/radiant/i.test(rar)||/^radiant /i.test(d.name),
+  be:d.category==="Energy"&&d.energyType==="Normal",qty:1}}
+async function add(i,where){const c=list[i];toast("Agregando…");let f;try{f=await full(c)}catch(e){toast("Error de red");return}
+ const arr=where==="dk"?deck().cards:S.coll;const e=arr.find(x=>x.id===f.id);e?e.qty++:arr.push(f);save();toast(where==="dk"?"Añadida al deck":"Añadida a la colección")}
+
+// ---------- Reglas Standard ----------
+function validate(d){const o=[],a=(ok,m)=>o.push([ok,m]);
+ const t=d.cards.reduce((x,c)=>x+c.qty,0);a(t===60,`Exactamente 60 cartas (tienes ${t})`);
+ const bas=d.cards.filter(c=>c.cat==="Pokemon"&&c.stage==="Basic").reduce((x,c)=>x+c.qty,0);a(bas>=1,"Al menos 1 Pokémon Básico");
+ const by={};d.cards.filter(c=>!c.be).forEach(c=>by[c.name]=(by[c.name]||0)+c.qty);
+ const ov=Object.keys(by).filter(n=>by[n]>4);a(!ov.length,"Máx. 4 copias por nombre (excepto Energía Básica)"+(ov.length?": "+ov.join(", "):""));
+ const ace=d.cards.filter(c=>c.ace).reduce((x,c)=>x+c.qty,0);a(ace<=1,`Máx. 1 carta ACE SPEC (tienes ${ace})`);
+ const rad=d.cards.filter(c=>c.rad).reduce((x,c)=>x+c.qty,0);a(rad<=1,`Máx. 1 Pokémon Radiante (tienes ${rad})`);
+ const il=d.cards.filter(c=>!c.be&&!c.std).map(c=>c.name);a(!il.length,"Todas las cartas legales en Standard"+(il.length?": "+[...new Set(il)].join(", "):""));
+ return{t,o,ok:o.every(x=>x[0])}}
+
+// ---------- Vistas ----------
+function render(){
+ $("#nav").innerHTML=[["exp","Expansiones"],["col","Colección"],["dk","Decks"]].map(([k,l])=>`<button class="${tab===k?"on":""}" onclick="go('${k}')">${l}</button>`).join("");
+ $("#v").innerHTML=tab==="exp"?vExp():tab==="col"?vCol():vDeck()}
+function cardHtml(c,i){return`<div class="c"><img loading="lazy" src="${img(c.image)}" alt="${esc(c.name)}" onerror="this.style.opacity=.3"><h3>${esc(c.name)}</h3><div class="m">${esc(c.set)} · #${esc(c.num)}</div>
+ <div class="two"><button class="s" onclick="add(${i},'col')">+ Colección</button><button class="p" onclick="add(${i},'dk')">+ Deck</button></div></div>`}
+function vExp(){
+ let h=`<div class="r"><input type="text" id="q" placeholder="Buscar carta por nombre (ej. Pikachu)…" onkeydown="if(event.key==='Enter')search(this.value)"><button class="p" onclick="search($('#q').value)">Buscar</button></div>`;
+ if(busy)return h+`<p class="m">Cargando…</p>`;if(msg)h+=`<p class="note">${esc(msg)}</p>`;
+ if(setInfo)h+=`<div class="r"><button class="s" onclick="go('exp')">← Expansiones</button><b>${esc(setInfo.name)}</b><span class="m">${esc(setInfo.serie||"")} ${esc(setInfo.date||"")} · ${list.length} cartas</span></div>`;
+ const isSets=list[0]&&list[0].kind==="set";
+ h+=`<div class="g ${isSets?"gs":""}">`+list.map((c,i)=>c.kind==="set"?`<div class="c" onclick="openSet('${esc(c.id)}')" style="cursor:pointer">${c.logo?`<img class="lg" loading="lazy" src="${c.logo}.png" style="object-fit:contain">`:""}<h3>${esc(c.name)}</h3><div class="m">${esc(c.id)} · ${c.n||"?"} cartas</div></div>`:cardHtml(c,i)).join("")+`</div>`;return h}
+function rows(arr,fn){return arr.map(c=>`<div class="row"><img src="${img(c.image)}" alt=""><div class="n"><b>${esc(c.name)}</b> <span class="m">#${esc(c.num)}</span><div class="m">${esc(c.set)} ${c.mark?`· <span class="b">${esc(c.mark)}</span>`:""}${c.ace?'<span class="b">ACE SPEC</span>':""}${c.rad?'<span class="b">Radiante</span>':""}</div></div>
+ <div class="q"><button onclick="${fn}('${c.id}',-1)">−</button><b>${c.qty}</b><button onclick="${fn}('${c.id}',1)">+</button></div></div>`).join("")}
+function vCol(){const n=S.coll.reduce((x,c)=>x+c.qty,0);
+ return`<div class="c"><div class="r"><b>Mi colección · ${n} cartas</b><span style="flex:1"></span><button class="s" onclick="exp()">Exportar</button><button class="s" onclick="$('#imp').click()">Importar</button><input id="imp" type="file" accept=".json" hidden onchange="imp(this.files[0])"></div>
+ ${S.coll.length?rows(S.coll,"qc"):`<p class="m">Vacía. Ve a Expansiones y pulsa “+ Colección” en una carta.</p>`}</div>`}
+function qc(id,d){const c=S.coll.find(x=>x.id===id);c.qty+=d;if(c.qty<=0)S.coll=S.coll.filter(x=>x!==c);save();render()}
+function vDeck(){const d=deck(),v=validate(d);
+ return`<div class="r"><select onchange="S.cur=this.value;render()">${S.decks.map(x=>`<option value="${x.id}" ${x.id===d.id?"selected":""}>${esc(x.name)}</option>`).join("")}</select>
+ <input type="text" value="${esc(d.name)}" onchange="deck().name=this.value;save();render()"><button class="s" onclick="nd()">+ Nuevo</button>
+ <button class="s" onclick="if(S.decks.length>1&&confirm('¿Borrar deck?')){S.decks=S.decks.filter(x=>x!==deck());S.cur=S.decks[0].id;save();render()}">Borrar</button></div>
+ <div class="c"><b>Formato Standard · ${v.t}/60</b> <span class="b ${v.ok?"ok":"no"}">${v.ok?"Legal":"No legal"}</span><div class="bar"><i style="width:${Math.min(100,v.t/.6)}%"></i></div>
+ <ul class="val">${v.o.map(x=>`<li class="${x[0]?"ok":"bad"}">${x[0]?"✓":"✗"} ${esc(x[1])}</li>`).join("")}</ul>
+ <p class="note">La legalidad viene de TCGdex (marca de regulación). Confirma siempre las reglas vigentes en pokemon.com.</p></div>
+ <div class="c">${d.cards.length?rows(d.cards,"qd"):`<p class="m">Deck vacío. Busca cartas en Expansiones y pulsa “+ Deck”.</p>`}</div>`}
+function qd(id,x){const d=deck(),c=d.cards.find(y=>y.id===id);c.qty+=x;if(c.qty<=0)d.cards=d.cards.filter(y=>y!==c);save();render()}
+function nd(){const d={id:rid(),name:"Deck "+(S.decks.length+1),cards:[]};S.decks.push(d);S.cur=d.id;save();render()}
+function exp(){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(S)],{type:"application/json"}));a.download="pokedeck-respaldo.json";a.click()}
+function imp(f){if(!f)return;const r=new FileReader();r.onload=()=>{try{const o=JSON.parse(r.result);if(o.coll&&o.decks){S=o;save();render();toast("Importado")}}catch(e){toast("Archivo inválido")}};r.readAsText(f)}
+go("exp");
+</script></body></html>
